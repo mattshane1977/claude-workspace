@@ -1,0 +1,14 @@
+[Unit]
+Description=AI Trader Web Server
+After=network.target
+
+[Service]
+Type=simple
+User=matt
+WorkingDirectory=/home/matt/trader
+ExecStart=/home/matt/trader/venv/bin/uvicorn web.app:app --host 0.0.0.0 --port 8080
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

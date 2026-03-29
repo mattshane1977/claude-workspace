@@ -1,0 +1,12 @@
+alpaca-py>=0.13.0
+pandas>=2.0.0
+pandas-ta>=0.3.14b
+ollama>=0.2.0
+python-dotenv>=1.0.0
+loguru>=0.7.0
+apscheduler>=3.10.0
+requests>=2.31.0
+websocket-client>=1.7.0
+fastapi>=0.110.0
+uvicorn[standard]>=0.29.0
+aiofiles>=23.2.0
