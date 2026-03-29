@@ -56,10 +56,65 @@ def init():
                 blocked_reason TEXT
             );
 
+            CREATE TABLE IF NOT EXISTS research (
+                id            INTEGER PRIMARY KEY AUTOINCREMENT,
+                ts            TEXT NOT NULL,
+                symbol        TEXT NOT NULL,
+                company       TEXT,
+                sector        TEXT,
+                price         REAL,
+                market_cap    REAL,
+                pe_ratio      REAL,
+                week52_high   REAL,
+                week52_low    REAL,
+                volume_vs_avg REAL,
+                ai_score      REAL,
+                ai_verdict    TEXT,
+                ai_reason     TEXT,
+                news_snippet  TEXT,
+                run_summary   TEXT
+            );
+
+            CREATE TABLE IF NOT EXISTS ipo_watch (
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                ts              TEXT NOT NULL,
+                company         TEXT,
+                ticker          TEXT,
+                cik             TEXT,
+                filed_date      TEXT,
+                form_type       TEXT,
+                sic             TEXT,
+                location        TEXT,
+                description     TEXT,
+                space_keywords  TEXT,
+                ai_score        REAL,
+                ai_verdict      TEXT,
+                ai_reason       TEXT,
+                edgar_url       TEXT,
+                llm_summary     TEXT
+            );
+
+            CREATE TABLE IF NOT EXISTS backtest_runs (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                ts          TEXT NOT NULL,
+                symbols     TEXT,
+                days        INTEGER,
+                result_json TEXT
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_ipo_watch_ts ON ipo_watch(ts);
             CREATE INDEX IF NOT EXISTS idx_decisions_ts ON decisions(ts);
             CREATE INDEX IF NOT EXISTS idx_trades_ts ON trades(ts);
             CREATE INDEX IF NOT EXISTS idx_cycles_ts ON cycles(ts);
+            CREATE INDEX IF NOT EXISTS idx_research_ts ON research(ts);
         """)
+    # Add signals column if it doesn't exist yet (migration for existing DBs)
+    try:
+        with _conn() as conn:
+            conn.execute("ALTER TABLE research ADD COLUMN signals TEXT")
+    except Exception:
+        pass  # column already exists
+
     logger.info(f"DB initialised at {DB_PATH}")
 
 
@@ -166,6 +221,103 @@ def get_trades(limit: int = 100, symbol: str = None) -> list[dict]:
                 "SELECT * FROM trades ORDER BY id DESC LIMIT ?", (limit,)
             ).fetchall()
     return [dict(r) for r in rows]
+
+
+def insert_ipo_watch(results: list[dict]):
+    ts = datetime.utcnow().isoformat()
+    with _conn() as conn:
+        conn.executemany(
+            """INSERT INTO ipo_watch
+               (ts, company, ticker, cik, filed_date, form_type, sic, location,
+                description, space_keywords, ai_score, ai_verdict, ai_reason, edgar_url, llm_summary)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            [
+                (
+                    ts,
+                    r.get("company"), r.get("ticker"), r.get("cik"),
+                    r.get("filed_date"), r.get("form_type"), r.get("sic"),
+                    r.get("location"), r.get("description"), r.get("space_keywords"),
+                    r.get("ai_score"), r.get("ai_verdict"), r.get("ai_reason"),
+                    r.get("edgar_url"), r.get("llm_summary"),
+                )
+                for r in results
+            ],
+        )
+
+
+def get_ipo_watch(limit: int = 200) -> list[dict]:
+    with _conn() as conn:
+        rows = conn.execute(
+            "SELECT * FROM ipo_watch ORDER BY id DESC LIMIT ?", (limit,)
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def insert_research(results: list[dict]):
+    ts = datetime.utcnow().isoformat()
+    with _conn() as conn:
+        conn.executemany(
+            """INSERT INTO research
+               (ts, symbol, company, sector, price, market_cap, pe_ratio,
+                week52_high, week52_low, volume_vs_avg,
+                ai_score, ai_verdict, ai_reason, news_snippet, run_summary, signals)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            [
+                (
+                    ts,
+                    r["symbol"],
+                    r.get("company"),
+                    r.get("sector"),
+                    r.get("price"),
+                    r.get("market_cap"),
+                    r.get("pe_ratio"),
+                    r.get("week52_high"),
+                    r.get("week52_low"),
+                    r.get("volume_vs_avg"),
+                    r.get("ai_score"),
+                    r.get("ai_verdict"),
+                    r.get("ai_reason"),
+                    r.get("news_snippet"),
+                    r.get("llm_summary"),
+                    r.get("signals"),
+                )
+                for r in results
+            ],
+        )
+
+
+def get_research(limit: int = 200) -> list[dict]:
+    with _conn() as conn:
+        rows = conn.execute(
+            "SELECT * FROM research ORDER BY id DESC LIMIT ?", (limit,)
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def insert_backtest(result: dict):
+    ts = datetime.utcnow().isoformat()
+    with _conn() as conn:
+        conn.execute(
+            "INSERT INTO backtest_runs (ts, symbols, days, result_json) VALUES (?, ?, ?, ?)",
+            (ts, ",".join(result.get("symbols", [])), result.get("days"), json.dumps(result)),
+        )
+
+
+def get_backtests(limit: int = 10) -> list[dict]:
+    with _conn() as conn:
+        rows = conn.execute(
+            "SELECT id, ts, symbols, days, result_json FROM backtest_runs ORDER BY id DESC LIMIT ?",
+            (limit,),
+        ).fetchall()
+    out = []
+    for r in rows:
+        d = dict(r)
+        try:
+            d["result"] = json.loads(d.pop("result_json"))
+        except Exception:
+            d["result"] = {}
+        out.append(d)
+    return out
 
 
 def get_equity_history(limit: int = 200) -> list[dict]:

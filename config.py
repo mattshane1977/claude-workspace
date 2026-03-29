@@ -1,7 +1,7 @@
 import os
 from dotenv import load_dotenv
 
-load_dotenv()
+load_dotenv(override=True)
 
 # Alpaca
 ALPACA_API_KEY = os.environ["ALPACA_API_KEY"]

@@ -2,9 +2,9 @@
 Sends market context to a local Ollama LLM and gets trade decisions.
 """
 import json
-import ollama
 from loguru import logger
 import config
+from brain import llm_stream
 
 SYSTEM_PROMPT = """You are an autonomous stock trading agent. Your job is to analyze market data and make buy, sell, or hold decisions for a small retail portfolio.
 
@@ -53,21 +53,17 @@ def decide(context_text: str) -> dict:
 
     logger.info(f"Sending context to {config.OLLAMA_MODEL} via Ollama...")
 
+    raw = ""
     try:
-        response = ollama.chat(
-            model=config.OLLAMA_MODEL,
+        raw = llm_stream.chat(
             messages=[
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": prompt},
             ],
-            options={
-                "temperature": 0.1,   # low temp = more deterministic, less hallucination
-                "num_predict": 1024,
-            },
+            options={"temperature": 0.1, "num_predict": 1024},
+            label="Trader",
         )
-
-        raw = response["message"]["content"].strip()
-        logger.debug(f"LLM raw response:\n{raw}")
+        raw = raw.strip()
 
         # Strip markdown code blocks if model wrapped output anyway
         if raw.startswith("```"):
